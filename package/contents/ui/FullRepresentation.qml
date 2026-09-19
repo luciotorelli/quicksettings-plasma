@@ -3,6 +3,8 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.components as PlasmaComponents
+import org.kde.plasma.core as PlasmaCore
+import org.kde.plasma.extras as PlasmaExtras
 import org.kde.plasma.plasmoid
 import org.kde.plasma.workspace.components as WorkspaceComponents
 import "components"
@@ -45,7 +47,11 @@ Item {
 
     function toggleExpansion(key) {
         const target = expandedKey === key ? "" : key;
-        if (target !== "" && expandedKey !== "") {
+        if (target === "") {
+            // Folding shut: the window stays as tall as it is until the panel
+            // has finished, then shrinks once (see windowHeight).
+            heldHeight = windowHeight;
+        } else if (expandedKey !== "") {
             // Switching panels: drop the old one at once. Two panels
             // animating opposite ways at the same time reads as a glitch.
             collapse();
@@ -60,7 +66,35 @@ Item {
         sliderPanel.snap = gridPanel.snap = true;
         expandedKey = "";
         sliderPanel.snap = gridPanel.snap = false;
+        heldHeight = 0;
     }
+
+    // The popup window is resized once per open or close, never per frame.
+    //
+    // Resizing a Plasma popup is expensive on Wayland - a new buffer, the
+    // dialog background re-rendered, the blur region recomputed - so following
+    // a panel's animation with the window is what made it stutter. Instead the
+    // window jumps straight to the height things are heading for, and the
+    // animation plays out inside it: opening, the window grows first and the
+    // content moves into the room; closing, the window waits (heldHeight) and
+    // shrinks when the panel has folded.
+    property real heldHeight: 0
+    readonly property real settledHeight: column.implicitHeight
+        - sliderPanel.implicitHeight - gridPanel.implicitHeight
+        + sliderPanel.targetHeight + gridPanel.targetHeight
+    readonly property real windowHeight: Math.max(settledHeight, heldHeight)
+
+    readonly property bool panelsSettled: sliderPanel.settled && gridPanel.settled
+    onPanelsSettledChanged: {
+        if (panelsSettled) {
+            heldHeight = 0;
+        }
+    }
+
+    // A popup on a bottom panel keeps its bottom edge where it is and grows
+    // upwards, so that is the edge the content has to hold on to while the
+    // window is taller than it. Anywhere else the top edge is the fixed one.
+    readonly property bool growsUpward: Plasmoid.location === PlasmaCore.Types.BottomEdge
 
     Connections {
         target: full.app
@@ -79,12 +113,19 @@ Item {
     Layout.minimumWidth: Kirigami.Units.gridUnit * 22
     Layout.preferredWidth: Kirigami.Units.gridUnit * 22
     Layout.maximumWidth: Kirigami.Units.gridUnit * 28
-    Layout.minimumHeight: column.implicitHeight
-    Layout.preferredHeight: column.implicitHeight
-    Layout.maximumHeight: column.implicitHeight
+    Layout.minimumHeight: windowHeight
+    Layout.preferredHeight: windowHeight
+    Layout.maximumHeight: windowHeight
 
+    SystemPalette {
+        id: systemPalette
+        colorGroup: SystemPalette.Active
+    }
     Style {
         id: look
+        // Read off the popup itself, which is visible; see Style.qml for why.
+        text: full.Kirigami.Theme.textColor
+        systemAccent: systemPalette.accent
     }
 
     // Test renders (tools/grab.sh) capture this item alone, without the popup
@@ -126,11 +167,8 @@ Item {
 
     ColumnLayout {
         id: column
-        anchors {
-            left: parent.left
-            right: parent.right
-            top: parent.top
-        }
+        width: parent.width
+        y: full.growsUpward ? Math.max(0, full.height - implicitHeight) : 0
         spacing: 10
 
         // Header strip: battery readout on the left, system actions on the right.
@@ -211,19 +249,51 @@ Item {
             IconButton {
                 style: look
                 filled: true
+                id: powerButton
                 iconName: "system-shutdown-symbolic"
-                tooltip: i18n("Shut Down…")
-                onClicked: full.app.powerOff()
+                tooltip: i18n("Power")
+                onClicked: powerMenu.openRelative()
+
+                // Each entry acts at once: no confirmation screen, no countdown.
+                PlasmaExtras.Menu {
+                    id: powerMenu
+                    visualParent: powerButton
+                    placement: PlasmaExtras.Menu.BottomPosedLeftAlignedPopup
+
+                    PlasmaExtras.MenuItem {
+                        text: i18n("Sleep")
+                        icon: "system-suspend"
+                        visible: full.app.canSuspend
+                        onClicked: full.app.suspend()
+                    }
+                    PlasmaExtras.MenuItem {
+                        text: i18n("Restart")
+                        icon: "system-reboot"
+                        visible: full.app.canReboot
+                        onClicked: full.app.reboot()
+                    }
+                    PlasmaExtras.MenuItem {
+                        text: i18n("Shut Down")
+                        icon: "system-shutdown"
+                        visible: full.app.canShutdown
+                        onClicked: full.app.shutDown()
+                    }
+                }
             }
         }
 
         // Slider stack: volume (with its device chevron), then one brightness
         // slider per display.
         ColumnLayout {
-            spacing: 4
+            // No layout spacing here or in the grid: spacing around a panel
+            // would arrive all at once when it turns visible. Every row
+            // carries its own bottom margin instead, cancelled after the last.
+            spacing: 0
+            Layout.bottomMargin: -4
 
             SliderRow {
                 style: look
+                Layout.bottomMargin: 4
                 visible: full.config.showVolume && full.app.audio.available
                 iconName: full.app.audio.icon
                 label: i18n("Volume")
@@ -240,8 +310,8 @@ Item {
                 style: look
                 panels: ({ audio: audioPanel })
                 panelKey: full.expandedKey === "audio" ? "audio" : ""
-                Layout.topMargin: open ? 4 : 0
-                Layout.bottomMargin: open ? 4 : 0
+                gapAbove: 2
+                gapBelow: 6
             }
 
             Repeater {
@@ -250,6 +320,7 @@ Item {
                     required property var modelData
 
                     style: look
+                    Layout.bottomMargin: 4
                     display: modelData
                     monitor: full.config.showMonitorContrast && !modelData.isInternal
                         ? full.app.contrast.monitorFor(modelData.label) : null
@@ -266,7 +337,8 @@ Item {
             columns: 2
             uniformCellWidths: true
             columnSpacing: look.pillSpacing
-            rowSpacing: look.pillSpacing
+            rowSpacing: 0
+            Layout.bottomMargin: -look.pillSpacing
 
             component Pill: QuickTile {
                 required property string key
@@ -275,6 +347,7 @@ Item {
                 style: look
                 bodyToggles: full.config.bodyToggles
                 visible: slot >= 0
+                Layout.bottomMargin: look.pillSpacing
                 Layout.row: 2 * Math.floor(Math.max(0, slot) / 2)
                 Layout.column: Math.max(0, slot) % 2
                 onExpandRequested: full.toggleExpansion(key)
@@ -380,6 +453,7 @@ Item {
                     fan: fanPanel,
                 })
                 panelKey: full.expandedKey !== "audio" ? full.expandedKey : ""
+                gapBelow: look.pillSpacing
                 Layout.row: 2 * Math.floor(full.gridPanelSlot / 2) + 1
                 Layout.column: 0
                 Layout.columnSpan: 2

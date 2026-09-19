@@ -1,4 +1,5 @@
 import QtQuick
+import org.kde.plasma.private.sessions as Sessions
 
 // Development aid: renders the popup to an image and quits. Loaded only when
 // the process was started with a `qs-grab=<path>` argument (see main.qml).
@@ -23,6 +24,10 @@ Item {
     // `qs-check-config` loads every settings page once and reports QML errors,
     // since the pages are otherwise only compiled when the dialog opens.
     Component.onCompleted: {
+        if (Qt.application.arguments.includes("qs-check-enums")) {
+            console.log("qs-check-enums: ConfirmationMode.Skip =", Sessions.SessionManagement.ConfirmationMode.Skip,
+                        "Default =", Sessions.SessionManagement.ConfirmationMode.Default);
+        }
         if (!Qt.application.arguments.includes("qs-check-config")) {
             return;
         }

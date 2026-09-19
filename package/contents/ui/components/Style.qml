@@ -1,20 +1,26 @@
 import QtQuick
-import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasmoid
 
 // Colours and metrics shared by everything in the popup.
 //
-// An Item rather than a plain object so Kirigami.Theme resolves against the
-// popup it sits in, and so follows the Plasma style as well as the colour
-// scheme. Tile washes are the text colour at low alpha rather than white, so
-// they read on a light theme as well as a dark one.
-Item {
+// The two theme colours are handed in rather than read here. Kirigami.Theme
+// only resolves for an item that is actually shown: read from an invisible
+// helper, inside plasmashell it yields the disabled text colour and an
+// invalid (black) highlight. So the popup binds them from itself.
+QtObject {
     id: style
-    visible: false
+
+    // Text colour of the popup this style is for (the Plasma style's).
+    required property color text
+    // The desktop's accent colour. Deliberately the system one, not the Plasma
+    // style's highlight: a style with its own colour table (ChromeOS, say)
+    // keeps its stock blue whatever accent is chosen in System Settings.
+    required property color systemAccent
 
     readonly property var config: Plasmoid.configuration
 
-    readonly property color text: Kirigami.Theme.textColor
+    // Tile washes are the text colour at low alpha rather than white, so they
+    // read on a light theme as well as a dark one.
     readonly property color textMuted: Qt.alpha(text, 0.55)
     readonly property color tileIdle: Qt.alpha(text, 0.07)
     readonly property color tileHover: Qt.alpha(text, 0.13)
@@ -23,7 +29,7 @@ Item {
     readonly property color rule: Qt.alpha(text, 0.12)
     readonly property color panel: Qt.alpha(text, 0.06)
 
-    readonly property color accent: config.useThemeAccent ? Kirigami.Theme.highlightColor : config.customAccent
+    readonly property color accent: config.useThemeAccent ? systemAccent : config.customAccent
 
     // White on a bright orange is glaring, dark text on a deep blue is
     // unreadable, so unless told otherwise this decides from the accent's own

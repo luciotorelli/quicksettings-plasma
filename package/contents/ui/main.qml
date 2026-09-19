@@ -46,9 +46,25 @@ PlasmoidItem {
         session.lock();
     }
 
-    function powerOff() {
+    // The power menu's actions. ConfirmationMode.Skip: act at once, without
+    // Plasma's confirmation screen and its countdown.
+    readonly property bool canSuspend: session.canSuspend
+    readonly property bool canReboot: session.canReboot
+    readonly property bool canShutdown: session.canShutdown
+
+    function suspend() {
         root.expanded = false;
-        session.requestShutdown(); // Plasma's own confirmation screen
+        session.suspend();
+    }
+
+    function reboot() {
+        root.expanded = false;
+        session.requestReboot(Sessions.SessionManagement.ConfirmationMode.Skip);
+    }
+
+    function shutDown() {
+        root.expanded = false;
+        session.requestShutdown(Sessions.SessionManagement.ConfirmationMode.Skip);
     }
 
     toolTipMainText: i18n("Quick Settings")

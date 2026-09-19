@@ -6,11 +6,15 @@ import org.kde.plasma.components as PlasmaComponents
 
 // The inline panel a chevron opens: header, live list, footer action.
 //
-// Two things move together when it opens. The height is animated, which makes
-// the whole popup grow rather than jump. The content is scaled vertically by
-// the same fraction, so its bottom edge stays pinned to the clip edge: every
-// row is there from the first frame and the panel unfolds as one piece,
-// instead of the rows being uncovered one after another.
+// One number, `progress`, drives the whole reveal. The height follows it, and
+// the content is scaled vertically by the same fraction so its bottom edge
+// stays pinned to the clip edge: every row is there from the first frame and
+// the panel unfolds as one piece, instead of rows being uncovered one by one.
+//
+// While it moves, the content is drawn through a layer - rendered once into a
+// texture and that texture scaled. Scaling the live items instead makes Qt
+// re-rasterise every glyph at every intermediate size, which is what made the
+// reveal stutter.
 Item {
     id: panel
 
@@ -22,11 +26,32 @@ Item {
     property var panels: ({})           // key -> Component
     property bool snap: false           // skip the animation (switching panels)
 
+    // Space around the panel that appears and disappears with it. Kept in here
+    // rather than in the surrounding layout's spacing, which would arrive all
+    // at once the moment the panel becomes visible.
+    property real gapAbove: 0
+    property real gapBelow: 0
+
     readonly property bool open: panelKey !== ""
     readonly property var body: loader.item
     readonly property real naturalHeight: content.implicitHeight + 24
+    readonly property real fullHeight: naturalHeight + gapAbove + gapBelow
 
-    signal footerActivated()
+    // Where the height is heading, as opposed to where the animation has got
+    // to. The popup sizes its window from this, once, instead of following
+    // the animation frame by frame.
+    readonly property real targetHeight: open ? fullHeight : 0
+    readonly property bool settled: progress === (open ? 1 : 0)
+
+    property real progress: open ? 1 : 0
+    Behavior on progress {
+        enabled: !panel.snap && panel.style.panelDuration > 0
+        NumberAnimation {
+            // Must not overshoot: height and scale have to stay in lockstep.
+            duration: panel.open ? panel.style.panelDuration : Math.round(panel.style.panelDuration * 0.75)
+            easing.type: Easing.OutCubic
+        }
+    }
 
     onPanelKeyChanged: {
         if (panelKey !== "") {
@@ -34,20 +59,10 @@ Item {
         }
     }
 
-    implicitHeight: open ? naturalHeight : 0
-    Behavior on implicitHeight {
-        enabled: !panel.snap && panel.style.panelDuration > 0
-        NumberAnimation {
-            // Must not overshoot: height and scale have to stay in lockstep.
-            duration: panel.open ? panel.style.panelDuration : Math.round(panel.style.panelDuration * 0.75)
-            easing.type: Easing.OutQuad
-        }
-    }
-
+    implicitHeight: progress * fullHeight
     Layout.fillWidth: true
-    visible: implicitHeight > 0
+    visible: progress > 0
     clip: true
-    opacity: naturalHeight > 0 ? Math.min(1, implicitHeight / naturalHeight * 1.5) : 0
 
     onVisibleChanged: {
         if (!visible && !open) {
@@ -56,9 +71,15 @@ Item {
     }
 
     Rectangle {
-        anchors.fill: parent
+        id: background
+        anchors {
+            fill: parent
+            topMargin: panel.gapAbove * panel.progress
+            bottomMargin: panel.gapBelow * panel.progress
+        }
         radius: 18
         color: panel.style.panel
+        opacity: Math.min(1, panel.progress * 1.5)
     }
 
     ColumnLayout {
@@ -66,16 +87,20 @@ Item {
         anchors {
             left: parent.left
             right: parent.right
-            top: parent.top
+            top: background.top
             leftMargin: 14
             rightMargin: 14
-            topMargin: 12
+            topMargin: 12 * panel.progress
         }
         spacing: 6
+        opacity: Math.min(1, panel.progress * 1.5)
+
+        layer.enabled: panel.progress > 0 && panel.progress < 1
+        layer.smooth: true
 
         transform: Scale {
             origin.y: 0
-            yScale: panel.naturalHeight > 0 ? Math.min(1, panel.implicitHeight / panel.naturalHeight) : 1
+            yScale: panel.progress
         }
 
         RowLayout {
@@ -139,7 +164,6 @@ Item {
                 if (panel.body) {
                     panel.body.footerAction();
                 }
-                panel.footerActivated();
             }
 
             contentItem: PlasmaComponents.Label {
