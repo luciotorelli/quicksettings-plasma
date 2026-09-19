@@ -15,6 +15,7 @@ T.AbstractButton {
     property string fallbackIconName
     property int iconSize: 16
     property bool filled: false
+    property real iconRotation: 0
     property string tooltip
 
     implicitWidth: filled ? 32 : iconSize + 10
@@ -37,6 +38,10 @@ T.AbstractButton {
             isMask: true
             color: button.style.text
             opacity: button.enabled ? 1 : 0.4
+            rotation: button.iconRotation
+            Behavior on rotation {
+                NumberAnimation { duration: button.style.panelDuration; easing.type: Easing.OutCubic }
+            }
         }
     }
 

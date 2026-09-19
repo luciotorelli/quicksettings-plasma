@@ -24,6 +24,7 @@ Item {
     // there is nothing binary to flip, so both halves open the panel.
     property bool toggleable: true
     property bool expandable: false
+    property bool expanded: false       // its panel is open: the chevron points down
     property bool bodyToggles: true
 
     signal toggled()
@@ -164,6 +165,10 @@ Item {
                     source: "go-next-symbolic"
                     isMask: true
                     color: tile.foreground
+                    rotation: tile.expanded ? 90 : 0
+                    Behavior on rotation {
+                        NumberAnimation { duration: tile.style.panelDuration; easing.type: Easing.OutCubic }
+                    }
                 }
             }
 

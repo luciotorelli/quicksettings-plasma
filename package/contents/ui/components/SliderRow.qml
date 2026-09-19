@@ -14,6 +14,7 @@ RowLayout {
     property real value: 0
     property bool iconClickable: false
     property bool expandable: false
+    property bool expanded: false
 
     signal moved(real value)
     signal iconClicked()
@@ -54,6 +55,7 @@ RowLayout {
         style: row.style
         iconName: "go-next-symbolic"
         iconSize: 14
+        iconRotation: row.expanded ? 90 : 0
         tooltip: i18nc("@action:button %1 is a slider such as Volume", "Open %1 panel", row.label)
         onClicked: row.expandRequested()
     }

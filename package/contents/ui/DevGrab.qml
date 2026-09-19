@@ -83,6 +83,23 @@ Item {
         }
     }
 
+    // `qs-switch=<key>` opens a second panel 700 ms after qs-expand opened the
+    // first, to exercise switching from one panel straight to another.
+    readonly property string switchKey: {
+        const arg = Qt.application.arguments.find(a => a.startsWith("qs-switch="));
+        return arg ? arg.slice("qs-switch=".length) : "";
+    }
+    Timer {
+        interval: 1600
+        running: grab.plasmoidItem !== null && grab.expandKey !== "" && grab.switchKey !== ""
+        onTriggered: {
+            const target = grab.plasmoidItem.fullRepresentationItem;
+            if (target) {
+                target.toggleExpansion(grab.switchKey);
+            }
+        }
+    }
+
     // `qs-delay=<ms>` waits longer before grabbing, for the slow readers
     // (ddcutil takes a few seconds to find a monitor).
     readonly property int delay: {

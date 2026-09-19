@@ -12,10 +12,10 @@ PanelBody {
     settingsModule: "kcm_networkmanagement"
     busy: app.network.scanning
 
-    // How many networks to list. The model is already sorted with the
-    // connected one first and the rest by signal, and merges the per-band,
-    // per-AP duplicates of one SSID, so this is simply the best few.
-    readonly property int limit: 6
+    // How many networks to list; the panel scrolls. The model is already
+    // sorted with the connected one first and the rest by signal, and merges
+    // the per-band, per-AP duplicates of one SSID, so this is the best few.
+    readonly property int limit: 12
 
     function signalIcon(strength) {
         if (strength >= 80) {

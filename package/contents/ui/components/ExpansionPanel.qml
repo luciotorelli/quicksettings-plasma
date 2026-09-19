@@ -6,15 +6,19 @@ import org.kde.plasma.components as PlasmaComponents
 
 // The inline panel a chevron opens: header, live list, footer action.
 //
-// One number, `progress`, drives the whole reveal. The height follows it, and
-// the content is scaled vertically by the same fraction so its bottom edge
-// stays pinned to the clip edge: every row is there from the first frame and
-// the panel unfolds as one piece, instead of rows being uncovered one by one.
+// It opens to a height it is given (`openHeight`, whatever the popup has left
+// beneath the row that owns it) rather than to the height of its contents, and
+// the list scrolls inside. That is what lets the popup window stay one size:
+// Plasma cannot resize a popup that hangs off a bottom panel without it
+// visibly jumping, so nothing here may ask it to.
 //
+// One number, `progress`, drives the reveal. The height follows it, and the
+// content is scaled vertically by the same fraction so its bottom edge stays
+// pinned to the clip edge: every row is there from the first frame and the
+// panel unfolds as one piece, instead of rows being uncovered one by one.
 // While it moves, the content is drawn through a layer - rendered once into a
-// texture and that texture scaled. Scaling the live items instead makes Qt
-// re-rasterise every glyph at every intermediate size, which is what made the
-// reveal stutter.
+// texture and that texture scaled - because scaling the live items makes Qt
+// re-rasterise every glyph at every intermediate size.
 //
 // The bodies are built ahead of time (`preload`), in the background, and kept.
 // Building one on the click meant the animation ran while its rows were still
@@ -25,70 +29,24 @@ Item {
 
     required property Style style
 
-    // Which panel to show; "" closes it. The content outlives the key by one
-    // close animation so it does not vanish before the panel has folded shut.
+    // Which panel to show; "" closes it.
     property string panelKey: ""
     property var panels: ({})           // key -> Component
     property bool snap: false           // skip the animation (switching panels)
     property bool preload: false        // build every body now, not on demand
+    property real openHeight: 0
+    property real gapAbove: 0           // space above the card, part of openHeight
 
     // The body on show. Outlives panelKey, so the content is still there
     // while the panel folds shut.
     property string shownKey: ""
     property var bodies: ({})           // key -> built body
 
-    // Space around the panel that appears and disappears with it. Kept in here
-    // rather than in the surrounding layout's spacing, which would arrive all
-    // at once the moment the panel becomes visible.
-    property real gapAbove: 0
-    property real gapBelow: 0
-
     readonly property bool open: panelKey !== ""
     readonly property var body: bodies[shownKey] || null
-    readonly property real naturalHeight: content.implicitHeight + 24
-    readonly property real fullHeight: naturalHeight + gapAbove + gapBelow
-
-    // Where the height is heading, as opposed to where the animation has got
-    // to. The popup sizes its window from this, once, instead of following
-    // the animation frame by frame.
-    readonly property real targetHeight: open ? fullHeight : 0
     readonly property bool settled: progress === (open ? 1 : 0)
 
-    // Opening happens in two steps: first the popup window is resized to make
-    // room (it watches targetHeight), and only once it has - windowReady, set
-    // by the popup - does the reveal start. Run together, the cost of the
-    // resize comes out of the first frames of the animation and the panel
-    // appears to jump. `armed` makes sure at least a frame has gone by, so the
-    // new height has been worked out before anyone checks whether the window
-    // matches it; `waited` stops a window that cannot grow (a small screen)
-    // from holding the panel shut for ever.
-    property bool windowReady: true
-    property bool armed: false
-    property bool waited: false
-    readonly property bool revealing: open && armed && (windowReady || waited)
-
-    onOpenChanged: {
-        armed = false;
-        waited = false;
-        armTimer.stop();
-        giveUpTimer.stop();
-        if (open) {
-            armTimer.start();
-            giveUpTimer.start();
-        }
-    }
-    Timer {
-        id: armTimer
-        interval: 32
-        onTriggered: panel.armed = true
-    }
-    Timer {
-        id: giveUpTimer
-        interval: 250
-        onTriggered: panel.waited = true
-    }
-
-    property real progress: revealing ? 1 : 0
+    property real progress: open ? 1 : 0
     Behavior on progress {
         enabled: !panel.snap && panel.style.panelDuration > 0
         NumberAnimation {
@@ -101,6 +59,7 @@ Item {
     onPanelKeyChanged: {
         if (panelKey !== "") {
             shownKey = panelKey;
+            scroller.contentY = 0;
         }
     }
 
@@ -112,33 +71,29 @@ Item {
         }
     }
 
-    implicitHeight: progress * fullHeight
+    implicitHeight: Math.round(progress * openHeight)
     Layout.fillWidth: true
     visible: progress > 0
     clip: true
 
     Rectangle {
-        id: background
         anchors {
             fill: parent
             topMargin: panel.gapAbove * panel.progress
-            bottomMargin: panel.gapBelow * panel.progress
         }
         radius: 18
         color: panel.style.panel
         opacity: Math.min(1, panel.progress * 1.5)
     }
 
+    // Laid out once at the open size and never again while the panel moves;
+    // only the transform changes from frame to frame.
     ColumnLayout {
         id: content
-        anchors {
-            left: parent.left
-            right: parent.right
-            top: background.top
-            leftMargin: 14
-            rightMargin: 14
-            topMargin: 12 * panel.progress
-        }
+        x: 14
+        y: (panel.gapAbove + 12) * panel.progress
+        width: panel.width - 28
+        height: Math.max(0, panel.openHeight - panel.gapAbove - 24)
         spacing: 6
         opacity: Math.min(1, panel.progress * 1.5)
 
@@ -180,33 +135,59 @@ Item {
                 textFormat: Text.PlainText
             }
 
-            PlasmaComponents.BusyIndicator {
-                implicitWidth: 22
-                implicitHeight: 22
-                visible: running
-                running: panel.body !== null && panel.body.busy === true
+            Loader {
+                active: panel.body !== null && panel.body.busy === true
+                visible: active
+                sourceComponent: PlasmaComponents.BusyIndicator {
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    running: true
+                }
             }
         }
 
-        Repeater {
-            model: Object.keys(panel.panels)
-            delegate: Loader {
-                required property string modelData
+        Flickable {
+            id: scroller
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
+            contentWidth: width
+            contentHeight: bodyHost.implicitHeight
+            boundsBehavior: Flickable.StopAtBounds
+            interactive: contentHeight > height
 
-                Layout.fillWidth: true
-                // In the background, unless it is wanted this instant.
-                asynchronous: panel.shownKey !== modelData
-                active: panel.preload || panel.shownKey === modelData
-                visible: panel.shownKey === modelData && status === Loader.Ready
-                sourceComponent: panel.panels[modelData]
-                onLoaded: panel.bodies = Object.assign({}, panel.bodies, { [modelData]: item })
+            T.ScrollBar.vertical: PlasmaComponents.ScrollBar {
+                id: scrollBar
+            }
+
+            ColumnLayout {
+                id: bodyHost
+                // Clear of the scroll bar, which otherwise sits on top of the
+                // row actions.
+                width: scroller.width - (scroller.interactive ? scrollBar.width + 4 : 0)
+                spacing: 0
+
+                Repeater {
+                    model: Object.keys(panel.panels)
+                    delegate: Loader {
+                        required property string modelData
+
+                        Layout.fillWidth: true
+                        // In the background, unless it is wanted this instant.
+                        asynchronous: panel.shownKey !== modelData
+                        active: panel.preload || panel.shownKey === modelData
+                        visible: panel.shownKey === modelData && status === Loader.Ready
+                        sourceComponent: panel.panels[modelData]
+                        onLoaded: panel.bodies = Object.assign({}, panel.bodies, { [modelData]: item })
+                    }
+                }
             }
         }
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.topMargin: 6
-            Layout.bottomMargin: 6
+            Layout.topMargin: 2
+            Layout.bottomMargin: 2
             implicitHeight: 1
             color: panel.style.rule
         }

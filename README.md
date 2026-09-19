@@ -15,7 +15,8 @@ the Cinnamon applet, and keeps its layout.
   one brightness slider per display, and contrast for DDC/CI monitors.
 - **Pills** - Wired, Bluetooth, Wi-Fi, VPN (WireGuard included), Power Mode, Fan Curve,
   Night Light, Keep Awake, Airplane Mode. Click a pill to toggle it; the arrow opens a
-  panel listing networks, devices, tunnels, profiles or fan strategies.
+  panel listing networks, devices, tunnels, profiles or fan strategies. The pill's row
+  slides up under the header and the panel unfolds beneath it; long lists scroll.
 - **Settings** - which pills and sliders to show, pill size and shape, accent colour,
   whether the pill or the arrow does the toggling, and the panel animation.
 
@@ -83,11 +84,18 @@ tools/grab.sh /tmp/qs.png qs-expand=wifi       # with a panel open
 tools/grab.sh /tmp/qs.png qs-delay=14000       # wait for ddcutil before grabbing
 tools/grab.sh /tmp/qs.png qs-check-config      # compile every settings page
 tools/grab.sh /tmp/qs.png qs-expand=wifi qs-collapse qs-delay=2600   # open, then close again
+tools/grab.sh /tmp/qs.png qs-expand=audio qs-switch=wifi qs-delay=2600   # one panel to another
 tools/grab.sh docs/preview-main.png qs-demo    # placeholder Wi-Fi name, for public images
 ```
 
 QML warnings land in the `.log` file next to the image. The hook behind this is
 `DevGrab.qml`, which only loads when the process is started with a `qs-grab=` argument.
 
-One QML trap worth knowing: a property whose name starts with `on` followed by a capital
-(`onAccent`) is parsed as a signal handler and silently never gets its value.
+Two things learned the hard way:
+
+- The popup window never changes size while it is open. A Plasma popup on a bottom panel
+  has to be resized *and* moved to grow upwards, and on Wayland the move is applied before
+  the taller contents arrive, so it visibly jumps up and drops back. Panels are therefore
+  given room inside a fixed-size window instead (see `FullRepresentation.qml`).
+- A QML trap: a property whose name starts with `on` followed by a capital (`onAccent`)
+  is parsed as a signal handler and silently never gets its value.
