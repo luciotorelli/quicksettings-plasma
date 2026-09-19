@@ -54,21 +54,47 @@ Item {
     readonly property real targetHeight: open ? fullHeight : 0
     readonly property bool settled: progress === (open ? 1 : 0)
 
-    property real progress: open ? 1 : 0
+    // Opening happens in two steps: first the popup window is resized to make
+    // room (it watches targetHeight), and only once it has - windowReady, set
+    // by the popup - does the reveal start. Run together, the cost of the
+    // resize comes out of the first frames of the animation and the panel
+    // appears to jump. `armed` makes sure at least a frame has gone by, so the
+    // new height has been worked out before anyone checks whether the window
+    // matches it; `waited` stops a window that cannot grow (a small screen)
+    // from holding the panel shut for ever.
+    property bool windowReady: true
+    property bool armed: false
+    property bool waited: false
+    readonly property bool revealing: open && armed && (windowReady || waited)
+
+    onOpenChanged: {
+        armed = false;
+        waited = false;
+        armTimer.stop();
+        giveUpTimer.stop();
+        if (open) {
+            armTimer.start();
+            giveUpTimer.start();
+        }
+    }
+    Timer {
+        id: armTimer
+        interval: 32
+        onTriggered: panel.armed = true
+    }
+    Timer {
+        id: giveUpTimer
+        interval: 250
+        onTriggered: panel.waited = true
+    }
+
+    property real progress: revealing ? 1 : 0
     Behavior on progress {
         enabled: !panel.snap && panel.style.panelDuration > 0
-        SequentialAnimation {
-            // Opening, the popup window is resized in the same instant. Give
-            // that a beat to land, or its cost comes out of the first frames
-            // of the reveal and the panel appears to jump.
-            PauseAnimation {
-                duration: panel.open ? 40 : 0
-            }
-            NumberAnimation {
-                // Must not overshoot: height and scale have to stay in lockstep.
-                duration: panel.open ? panel.style.panelDuration : Math.round(panel.style.panelDuration * 0.75)
-                easing.type: Easing.OutCubic
-            }
+        NumberAnimation {
+            // Must not overshoot: height and scale have to stay in lockstep.
+            duration: panel.open ? panel.style.panelDuration : Math.round(panel.style.panelDuration * 0.75)
+            easing.type: Easing.OutCubic
         }
     }
 

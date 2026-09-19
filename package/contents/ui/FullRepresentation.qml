@@ -50,7 +50,7 @@ Item {
         if (target === "") {
             // Folding shut: the window stays as tall as it is until the panel
             // has finished, then shrinks once (see windowHeight).
-            heldHeight = windowHeight;
+            frozenHeight = windowHeight;
         } else if (expandedKey !== "") {
             // Switching panels: drop the old one at once. Two panels
             // animating opposite ways at the same time reads as a glitch.
@@ -66,7 +66,7 @@ Item {
         sliderPanel.snap = gridPanel.snap = true;
         expandedKey = "";
         sliderPanel.snap = gridPanel.snap = false;
-        heldHeight = 0;
+        frozenHeight = -1;
     }
 
     // The popup window is resized once per open or close, never per frame.
@@ -76,18 +76,51 @@ Item {
     // a panel's animation with the window is what made it stutter. Instead the
     // window jumps straight to the height things are heading for, and the
     // animation plays out inside it: opening, the window grows first and the
-    // content moves into the room; closing, the window waits (heldHeight) and
-    // shrinks when the panel has folded.
-    property real heldHeight: 0
-    readonly property real settledHeight: column.implicitHeight
+    // content moves into the room; closing, the window waits and shrinks when
+    // the panel has folded.
+    //
+    // While a panel is moving the height is pinned outright (frozenHeight).
+    // settledHeight is pieced together from layout sizes that update one
+    // after another and are rounded to whole pixels, so mid-animation it
+    // flickers - measured, two different values on every single frame - and
+    // each flicker would be another resize.
+    property real frozenHeight: -1
+    readonly property real settledHeight: Math.ceil(column.implicitHeight
         - sliderPanel.implicitHeight - gridPanel.implicitHeight
-        + sliderPanel.targetHeight + gridPanel.targetHeight
-    readonly property real windowHeight: Math.max(settledHeight, heldHeight)
+        + sliderPanel.targetHeight + gridPanel.targetHeight)
+    // settledHeight also arrives in steps when it changes for good (a body
+    // turns visible, then the layout catches up), so it is applied a frame
+    // late: the steps collapse into one resize. Never while pinned - a value
+    // picked up mid-flicker would be what the window snapped to on release.
+    property real appliedHeight: 0
+    onSettledHeightChanged: applyTimer.restart()
+    Component.onCompleted: appliedHeight = settledHeight
+    Timer {
+        id: applyTimer
+        interval: 16
+        onTriggered: {
+            if (full.frozenHeight < 0) {
+                full.appliedHeight = full.settledHeight;
+            }
+        }
+    }
+
+    readonly property real windowHeight: frozenHeight >= 0 ? frozenHeight : appliedHeight
+    readonly property bool windowReady: !applyTimer.running && height >= windowHeight - 1
 
     readonly property bool panelsSettled: sliderPanel.settled && gridPanel.settled
     onPanelsSettledChanged: {
         if (panelsSettled) {
-            heldHeight = 0;
+            frozenHeight = -1;
+            applyTimer.restart();
+        }
+    }
+
+    // A reveal is starting: the window has reached the new height by now, so
+    // that is the height to hold until the panel has finished.
+    function pinWindow(revealing) {
+        if (revealing) {
+            frozenHeight = windowHeight;
         }
     }
 
@@ -178,7 +211,9 @@ Item {
     ColumnLayout {
         id: column
         width: parent.width
-        y: full.growsUpward ? Math.max(0, full.height - implicitHeight) : 0
+        // Whole pixels, or every label above the panel sits on a fractional
+        // position and shimmers as it moves.
+        y: full.growsUpward ? Math.max(0, Math.round(full.height - implicitHeight)) : 0
         spacing: 10
 
         // Header strip: battery readout on the left, system actions on the right.
@@ -319,6 +354,8 @@ Item {
                 id: sliderPanel
                 style: look
                 preload: full.preloadPanels
+                windowReady: full.windowReady
+                onRevealingChanged: full.pinWindow(revealing)
                 panels: ({ audio: audioPanel })
                 panelKey: full.expandedKey === "audio" ? "audio" : ""
                 gapAbove: 2
@@ -456,6 +493,8 @@ Item {
                 id: gridPanel
                 style: look
                 preload: full.preloadPanels
+                windowReady: full.windowReady
+                onRevealingChanged: full.pinWindow(revealing)
                 panels: ({
                     wired: wiredPanel,
                     bluetooth: bluetoothPanel,

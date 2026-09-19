@@ -70,6 +70,19 @@ Item {
         }
     }
 
+    // `qs-collapse` closes the panel again 700 ms after qs-expand opened it, to
+    // exercise the closing animation as well.
+    Timer {
+        interval: 1600
+        running: grab.plasmoidItem !== null && grab.expandKey !== "" && Qt.application.arguments.includes("qs-collapse")
+        onTriggered: {
+            const target = grab.plasmoidItem.fullRepresentationItem;
+            if (target) {
+                target.toggleExpansion(grab.expandKey);
+            }
+        }
+    }
+
     // `qs-delay=<ms>` waits longer before grabbing, for the slow readers
     // (ddcutil takes a few seconds to find a monitor).
     readonly property int delay: {
