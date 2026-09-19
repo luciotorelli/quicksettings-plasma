@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import org.kde.plasma.networkmanagement as PlasmaNM
 import "../components"
 
@@ -29,25 +30,37 @@ PanelBody {
         return strength >= 5 ? "network-wireless-signal-weak-symbolic" : "network-wireless-signal-none-symbolic";
     }
 
-    Component.onCompleted: app.network.requestScan()
+    // Rescan when the panel is open rather than as it opens, so results
+    // arriving do not reshuffle the list under the animation.
+    function opened() {
+        app.network.requestScan();
+    }
 
     Repeater {
         id: list
         model: body.app.network.wifiConnections
-        delegate: PanelRow {
+        // A flat's worth of access points can be dozens of rows; only the
+        // ones that show are worth building.
+        delegate: Loader {
+            id: slot
+
             required property var model
             required property int index
-            readonly property bool up: model.ConnectionState === PlasmaNM.Enums.Activated
 
-            visible: index < body.limit
-            style: body.style
-            iconName: body.signalIcon(model.Signal)
-            label: model.ItemUniqueName
-            current: false
-            busy: model.ConnectionState === PlasmaNM.Enums.Activating
-                  || model.ConnectionState === PlasmaNM.Enums.Deactivating
-            actionText: up ? i18n("Disconnect") : i18n("Connect")
-            onActivated: body.app.network.setConnection(model, !up)
+            Layout.fillWidth: true
+            active: index < body.limit
+            visible: active
+            sourceComponent: PanelRow {
+                readonly property bool up: slot.model.ConnectionState === PlasmaNM.Enums.Activated
+
+                style: body.style
+                iconName: body.signalIcon(slot.model.Signal)
+                label: slot.model.ItemUniqueName ?? ""
+                busy: slot.model.ConnectionState === PlasmaNM.Enums.Activating
+                      || slot.model.ConnectionState === PlasmaNM.Enums.Deactivating
+                actionText: up ? i18n("Disconnect") : i18n("Connect")
+                onActivated: body.app.network.setConnection(slot.model, !up)
+            }
         }
     }
 

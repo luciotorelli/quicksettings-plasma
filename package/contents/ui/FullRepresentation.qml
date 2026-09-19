@@ -91,6 +91,16 @@ Item {
         }
     }
 
+    // Build the panels in the background once the popup has had a moment to
+    // open, so that by the time a chevron is clicked there is nothing left to
+    // create. They are kept from then on; their lists are live either way.
+    property bool preloadPanels: false
+    Timer {
+        interval: 250
+        running: full.app.expanded && !full.preloadPanels
+        onTriggered: full.preloadPanels = true
+    }
+
     // A popup on a bottom panel keeps its bottom edge where it is and grows
     // upwards, so that is the edge the content has to hold on to while the
     // window is taller than it. Anywhere else the top edge is the fixed one.
@@ -308,6 +318,7 @@ Item {
             ExpansionPanel {
                 id: sliderPanel
                 style: look
+                preload: full.preloadPanels
                 panels: ({ audio: audioPanel })
                 panelKey: full.expandedKey === "audio" ? "audio" : ""
                 gapAbove: 2
@@ -444,6 +455,7 @@ Item {
             ExpansionPanel {
                 id: gridPanel
                 style: look
+                preload: full.preloadPanels
                 panels: ({
                     wired: wiredPanel,
                     bluetooth: bluetoothPanel,

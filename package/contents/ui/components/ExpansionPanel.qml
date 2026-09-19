@@ -15,6 +15,11 @@ import org.kde.plasma.components as PlasmaComponents
 // texture and that texture scaled. Scaling the live items instead makes Qt
 // re-rasterise every glyph at every intermediate size, which is what made the
 // reveal stutter.
+//
+// The bodies are built ahead of time (`preload`), in the background, and kept.
+// Building one on the click meant the animation ran while its rows were still
+// being created, and they visibly arrived a line at a time - the same thing
+// the Cinnamon applet's prefetch was there to hide.
 Item {
     id: panel
 
@@ -25,6 +30,12 @@ Item {
     property string panelKey: ""
     property var panels: ({})           // key -> Component
     property bool snap: false           // skip the animation (switching panels)
+    property bool preload: false        // build every body now, not on demand
+
+    // The body on show. Outlives panelKey, so the content is still there
+    // while the panel folds shut.
+    property string shownKey: ""
+    property var bodies: ({})           // key -> built body
 
     // Space around the panel that appears and disappears with it. Kept in here
     // rather than in the surrounding layout's spacing, which would arrive all
@@ -33,7 +44,7 @@ Item {
     property real gapBelow: 0
 
     readonly property bool open: panelKey !== ""
-    readonly property var body: loader.item
+    readonly property var body: bodies[shownKey] || null
     readonly property real naturalHeight: content.implicitHeight + 24
     readonly property real fullHeight: naturalHeight + gapAbove + gapBelow
 
@@ -46,16 +57,32 @@ Item {
     property real progress: open ? 1 : 0
     Behavior on progress {
         enabled: !panel.snap && panel.style.panelDuration > 0
-        NumberAnimation {
-            // Must not overshoot: height and scale have to stay in lockstep.
-            duration: panel.open ? panel.style.panelDuration : Math.round(panel.style.panelDuration * 0.75)
-            easing.type: Easing.OutCubic
+        SequentialAnimation {
+            // Opening, the popup window is resized in the same instant. Give
+            // that a beat to land, or its cost comes out of the first frames
+            // of the reveal and the panel appears to jump.
+            PauseAnimation {
+                duration: panel.open ? 40 : 0
+            }
+            NumberAnimation {
+                // Must not overshoot: height and scale have to stay in lockstep.
+                duration: panel.open ? panel.style.panelDuration : Math.round(panel.style.panelDuration * 0.75)
+                easing.type: Easing.OutCubic
+            }
         }
     }
 
     onPanelKeyChanged: {
         if (panelKey !== "") {
-            loader.sourceComponent = panels[panelKey] || null;
+            shownKey = panelKey;
+        }
+    }
+
+    // Tell the body once it is fully open, e.g. so Wi-Fi can rescan without
+    // its list reshuffling under the animation.
+    onSettledChanged: {
+        if (settled && open && body) {
+            body.opened();
         }
     }
 
@@ -63,12 +90,6 @@ Item {
     Layout.fillWidth: true
     visible: progress > 0
     clip: true
-
-    onVisibleChanged: {
-        if (!visible && !open) {
-            loader.sourceComponent = null; // folded shut: let the lists go
-        }
-    }
 
     Rectangle {
         id: background
@@ -141,9 +162,19 @@ Item {
             }
         }
 
-        Loader {
-            id: loader
-            Layout.fillWidth: true
+        Repeater {
+            model: Object.keys(panel.panels)
+            delegate: Loader {
+                required property string modelData
+
+                Layout.fillWidth: true
+                // In the background, unless it is wanted this instant.
+                asynchronous: panel.shownKey !== modelData
+                active: panel.preload || panel.shownKey === modelData
+                visible: panel.shownKey === modelData && status === Loader.Ready
+                sourceComponent: panel.panels[modelData]
+                onLoaded: panel.bodies = Object.assign({}, panel.bodies, { [modelData]: item })
+            }
         }
 
         Rectangle {

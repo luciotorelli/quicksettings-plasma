@@ -17,6 +17,10 @@ ColumnLayout {
     property string settingsModule      // KCM the footer opens
     property bool busy: false
 
+    // Called once the panel has finished opening.
+    function opened() {
+    }
+
     function footerAction() {
         if (settingsModule !== "") {
             app.openSettings(settingsModule);

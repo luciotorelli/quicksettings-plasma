@@ -39,11 +39,16 @@ RowLayout {
         textFormat: Text.PlainText
     }
 
-    PlasmaComponents.BusyIndicator {
-        implicitWidth: 18
-        implicitHeight: 18
-        visible: row.busy
-        running: row.busy
+    // Built on demand: a BusyIndicator is an SVG and an animator, and one in
+    // every row of every list made the rows slow to create.
+    Loader {
+        active: row.busy
+        visible: active
+        sourceComponent: PlasmaComponents.BusyIndicator {
+            implicitWidth: 18
+            implicitHeight: 18
+            running: true
+        }
     }
 
     T.AbstractButton {
