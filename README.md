@@ -36,7 +36,7 @@ and `pactl` each time the popup opens. Here the state is live:
 | Volume and devices | plasma-pa (`org.kde.plasma.private.volume`) |
 | Brightness | `org.kde.ScreenBrightness` over D-Bus - laptop panel and DDC/CI monitors alike |
 | Night Light | KWin's `NightLight` D-Bus interface to read, KWin's config to switch |
-| Keep Awake | one PowerDevil inhibition (`PolicyAgent.AddInhibition`), shared by every copy of the widget and restored after a plasmashell restart |
+| Keep Awake | one PowerDevil inhibition (`PolicyAgent.AddInhibition`), shared by every copy of the widget through a marker in `$XDG_RUNTIME_DIR` and restored after a plasmashell restart |
 | Power Mode | PowerDevil's `PowerProfile` D-Bus interface |
 | Battery | UPower's `DisplayDevice` |
 | Monitor contrast | `ddcutil` (Plasma has no contrast control) |
@@ -93,11 +93,14 @@ tools/grab.sh docs/preview-main.png qs-demo    # placeholder Wi-Fi name, for pub
 QML warnings land in the `.log` file next to the image. The hook behind this is
 `DevGrab.qml`, which only loads when the process is started with a `qs-grab=` argument.
 
-Two things learned the hard way:
+Things learned the hard way:
 
 - The popup window never changes size while it is open. A Plasma popup on a bottom panel
   has to be resized *and* moved to grow upwards, and on Wayland the move is applied before
   the taller contents arrive, so it visibly jumps up and drops back. Panels are therefore
   given room inside a fixed-size window instead (see `FullRepresentation.qml`).
+- Each copy of a widget gets a QML engine of its own, even though they all run inside the
+  one plasmashell, so a `pragma Singleton` is *not* shared between two copies on two panels.
+  Keep Awake coordinates through a file instead.
 - A QML trap: a property whose name starts with `on` followed by a capital (`onAccent`)
   is parsed as a signal handler and silently never gets its value.

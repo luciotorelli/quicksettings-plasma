@@ -19,7 +19,7 @@ PlasmoidItem {
     readonly property alias audio: audio
     readonly property alias brightness: brightness
     readonly property alias nightLight: nightLight
-    readonly property var keepAwake: Backends.KeepAwake
+    readonly property alias keepAwake: keepAwake
     readonly property alias power: power
     readonly property alias battery: battery
     readonly property alias fan: fan
@@ -92,13 +92,14 @@ PlasmoidItem {
         id: nightLight
         shell: shell
     }
-    // Shared by every copy of the widget; see KeepAwake.qml. Test renders share
-    // the runtime directory with the real widget, so they get a marker of
-    // their own and cannot switch its Keep Awake on or off.
-    Component.onCompleted: Backends.KeepAwake.start(
-        root.devGrabPath !== "" ? "quicksettings-keep-awake-test" : "quicksettings-keep-awake",
-        i18n("Keep Awake is on"))
-
+    Backends.KeepAwake {
+        id: keepAwake
+        shell: shell
+        reason: i18n("Keep Awake is on")
+        // Test renders share the runtime directory with the real widget;
+        // they must not switch its Keep Awake on or off.
+        markerName: root.devGrabPath !== "" ? "quicksettings-keep-awake-test" : "quicksettings-keep-awake"
+    }
     Backends.PowerProfiles { id: power }
     Backends.Battery { id: battery }
     Backends.Fan {

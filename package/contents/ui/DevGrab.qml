@@ -100,6 +100,27 @@ Item {
         }
     }
 
+    // `qs-second-awake` adds a second Keep Awake backend on the same marker, as
+    // a second copy of the widget in the same plasmashell would. Both should
+    // end up active, on one inhibition between them.
+    property var secondAwake: null
+    Timer {
+        interval: 1
+        running: grab.plasmoidItem !== null && Qt.application.arguments.includes("qs-second-awake")
+        onTriggered: {
+            const first = grab.plasmoidItem.keepAwake;
+            const component = Qt.createComponent("backends/KeepAwake.qml");
+            grab.secondAwake = component.createObject(grab, {
+                shell: first.shell, markerName: first.markerName, reason: first.reason });
+        }
+    }
+    Timer {
+        interval: 4000
+        running: grab.secondAwake !== null
+        onTriggered: console.warn("qs-second-awake: first", grab.plasmoidItem.keepAwake.active, grab.plasmoidItem.keepAwake.cookie,
+                                  "second", grab.secondAwake.active, grab.secondAwake.cookie)
+    }
+
     // `qs-delay=<ms>` waits longer before grabbing, for the slow readers
     // (ddcutil takes a few seconds to find a monitor).
     readonly property int delay: {

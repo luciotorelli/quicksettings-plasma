@@ -1,5 +1,3 @@
-pragma Singleton
-
 import QtQuick
 import org.kde.plasma.workspace.dbus as DBus
 
@@ -10,11 +8,7 @@ import org.kde.plasma.workspace.dbus as DBus
 // inhibition for both sleep and screen blanking, so there is nothing to stash
 // and restore.
 //
-// A singleton, because the widget is often there more than once - a panel on
-// each screen - and every copy runs inside the same plasmashell. With a state
-// of its own in each, switching it on in one popup left the other showing it
-// off, and each took out an inhibition of its own. This way there is one
-// state, one inhibition, and every pill follows it.
+// Two things make the bookkeeping less simple than that sounds.
 //
 // The inhibition belongs to plasmashell's D-Bus connection, so it dies
 // whenever plasmashell restarts - a crash, an update, a manual restart - and
@@ -23,76 +17,123 @@ import org.kde.plasma.workspace.dbus as DBus
 // inhibition is taken out again on startup if the marker is there. That
 // directory goes away on logout and reboot, so Keep Awake lasts for the login
 // session, as it did on Cinnamon, and cannot be left on by accident for good.
+//
+// And the widget is often there more than once - a panel on each screen.
+// Every copy runs inside the same plasmashell but in a QML engine of its own
+// (a singleton is not shared between them; tried), so they cannot share an
+// object. They share the marker instead. It records which plasmashell holds
+// the inhibition and under which cookie: "<pid> <cookie>". A copy that finds
+// its own plasmashell's pid there adopts that inhibition; any copy can
+// release it, since the connection is the same. When the pid is a previous
+// plasmashell's, exactly one copy wins the claim (an atomic mkdir) and takes
+// the inhibition out again, and the others pick it up from the marker.
 Item {
     id: keepAwake
+    visible: false
+
+    required property var shell
+    property string markerName: "quicksettings-keep-awake"
+    property string reason: ""          // shown by Plasma beside the inhibition
 
     readonly property string service: "org.kde.Solid.PowerManagement.PolicyAgent"
     readonly property string path: "/org/kde/Solid/PowerManagement/PolicyAgent"
     readonly property string appName: "Quick Settings"
+    readonly property string marker: '"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/' + markerName + '"'
 
     // InterruptSession (1) | ChangeScreenSettings (4): no sleep, no blanking.
     readonly property int inhibitionTypes: 5
 
     property bool active: false
     property int cookie: 0
-
-    property bool _started: false
-    property string _marker: ""
-    property string _reason: ""
+    property int _retries: 0
 
     /**
-     * Called by every copy of the widget as it loads; only the first call
-     * does anything.
-     *
-     * @param {string} markerName - File name in $XDG_RUNTIME_DIR.
-     * @param {string} reason - Shown by Plasma next to the inhibition. Passed
-     *     in because i18n() belongs to the widget's context, not this one.
+     * Brings this copy in line with the marker. Run at startup, whenever the
+     * popup opens, and when the power manager's list of inhibitions changes -
+     * another copy may have switched Keep Awake since this one last looked.
      */
-    function start(markerName, reason) {
-        if (_started) {
-            return;
-        }
-        _started = true;
-        _marker = '"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/' + markerName + '"';
-        _reason = reason;
-        shell.exec("test -e " + _marker, (stdout, exitCode) => {
-            if (exitCode === 0 && !keepAwake.active) {
+    function refresh() {
+        shell.exec(_readMarker, stdout => {
+            const state = keepAwake._parse(stdout);
+            if (!state.wanted) {
+                keepAwake.active = false;
+                keepAwake.cookie = 0;
+            } else if (state.heldHere) {
                 keepAwake.active = true;
+                keepAwake.cookie = state.cookie;
+            } else {
+                keepAwake.active = true;        // wanted, but held by no one
+                keepAwake._restore();
+            }
+        });
+    }
+
+    // The engine runs this as plasmashell's direct child, so $PPID is
+    // plasmashell. Prints "yes <pid> <cookie>" or "no", then the own pid. A
+    // marker that exists but is empty still counts as wanted.
+    readonly property string _readMarker: 'm=' + marker
+        + '; if [ -e "$m" ]; then echo "yes $(cat "$m")"; else echo no; fi; echo "$PPID"'
+
+    function _parse(stdout) {
+        const lines = String(stdout).trim().split("\n");
+        const first = (lines[0] || "").trim().split(/\s+/);
+        const ownPid = Number(lines[1]) || -1;
+        const pid = Number(first[1]) || 0;
+        const cookie = Number(first[2]) || 0;
+        return {
+            wanted: first[0] === "yes",
+            heldHere: pid === ownPid && cookie > 0,
+            cookie: cookie,
+        };
+    }
+
+    function _restore() {
+        // mkdir either creates the directory or fails, nothing in between, so
+        // only one copy gets to take the inhibition out. Claims left behind
+        // by earlier plasmashells are cleared on the way.
+        shell.exec('m=' + marker + '; for d in "$m".claim.*; do [ "$d" = "$m.claim.$PPID" ] || rmdir "$d" 2>/dev/null; done; '
+                   + 'mkdir "$m.claim.$PPID" 2>/dev/null', (stdout, exitCode) => {
+            if (exitCode === 0) {
                 keepAwake._acquire();
+            } else if (keepAwake._retries < 6) {
+                keepAwake._retries += 1;
+                retry.restart();                // another copy is on it
+            }
+        });
+    }
+
+    Timer {
+        id: retry
+        interval: 700
+        onTriggered: keepAwake.refresh()
+    }
+
+    function _acquire() {
+        _call("AddInhibition", [inhibitionTypes, appName, reason], "(uss)", value => {
+            const granted = Number(value) || 0;
+            keepAwake.cookie = granted;
+            keepAwake.active = granted !== 0;
+            if (granted !== 0) {
+                shell.exec('echo "$PPID ' + granted + '" > ' + marker);
             }
         });
     }
 
     function setActive(on) {
-        if (on === active || !_started) {
-            return;
-        }
         active = on; // echo, so the pill does not lag the click
         if (on) {
-            shell.exec("touch " + _marker);
             _acquire();
-        } else {
-            shell.exec("rm -f " + _marker);
-            const held = cookie;
-            cookie = 0;
-            if (held !== 0) {
-                _call("ReleaseInhibition", [held], "(u)", null);
-            }
+            return;
         }
-    }
-
-    function _acquire() {
-        _call("AddInhibition", [inhibitionTypes, appName, _reason], "(uss)", value => {
-            const granted = Number(value) || 0;
-            if (!keepAwake.active) {
-                // Switched off again before the reply came back.
-                if (granted !== 0) {
-                    keepAwake._call("ReleaseInhibition", [granted], "(u)", null);
-                }
-                return;
+        // Release whatever the marker names rather than what this copy last
+        // knew: another copy may have been the one to take it out.
+        shell.exec(_readMarker + '; rm -f "$m"', stdout => {
+            const state = keepAwake._parse(stdout);
+            const held = state.heldHere ? state.cookie : keepAwake.cookie;
+            keepAwake.cookie = 0;
+            if (held > 0) {
+                keepAwake._call("ReleaseInhibition", [held], "(u)", null);
             }
-            keepAwake.cookie = granted;
-            keepAwake.active = granted !== 0;
         });
     }
 
@@ -113,7 +154,18 @@ Item {
         }, error => console.warn("Quick Settings: " + member + " failed:", error && error.message));
     }
 
-    Shell {
-        id: shell
+    // Another copy switching Keep Awake shows up here.
+    DBus.SignalWatcher {
+        busType: DBus.BusType.Session
+        service: keepAwake.service
+        path: keepAwake.path
+        iface: keepAwake.service
+
+        function dbusInhibitionsChanged(added, removed) {
+            keepAwake._retries = 0;
+            keepAwake.refresh();
+        }
     }
+
+    Component.onCompleted: refresh()
 }

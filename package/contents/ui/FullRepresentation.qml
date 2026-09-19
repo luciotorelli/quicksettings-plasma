@@ -185,6 +185,7 @@ Item {
             if (full.app.expanded) {
                 // Everything else is live; these are the ones that are read.
                 full.app.brightness.refresh();
+                full.app.keepAwake.refresh();
                 full.app.fan.refresh();
                 full.app.contrast.scan(false);
             } else {
