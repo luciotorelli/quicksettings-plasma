@@ -92,7 +92,13 @@ PlasmoidItem {
         id: nightLight
         shell: shell
     }
-    Backends.KeepAwake { id: keepAwake }
+    Backends.KeepAwake {
+        id: keepAwake
+        shell: shell
+        // Test renders share the runtime directory with the real widget;
+        // they must not switch its Keep Awake on or off.
+        markerName: root.devGrabPath !== "" ? "quicksettings-keep-awake-test" : "quicksettings-keep-awake"
+    }
     Backends.PowerProfiles { id: power }
     Backends.Battery { id: battery }
     Backends.Fan {
