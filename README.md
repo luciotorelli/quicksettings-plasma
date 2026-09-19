@@ -102,5 +102,10 @@ Things learned the hard way:
 - Each copy of a widget gets a QML engine of its own, even though they all run inside the
   one plasmashell, so a `pragma Singleton` is *not* shared between two copies on two panels.
   Keep Awake coordinates through a file instead.
+- The `executable` data engine is shared by everything in plasmashell and identifies a run
+  by its command line. Two runners asking for the same text at the same moment get *one*
+  execution and the same result - so two copies of a widget, issuing identical commands,
+  were both told an atomic `mkdir` had succeeded. `Shell.qml` tags every command line with a
+  per-runner token (`tools/grab.sh out.png qs-check-shell` demonstrates it).
 - A QML trap: a property whose name starts with `on` followed by a capital (`onAccent`)
   is parsed as a signal handler and silently never gets its value.

@@ -104,21 +104,44 @@ Item {
     // a second copy of the widget in the same plasmashell would. Both should
     // end up active, on one inhibition between them.
     property var secondAwake: null
+    // qs-second-awake=<ms> starts it that much later, as a second panel does.
+    readonly property int secondAwakeDelay: {
+        const arg = Qt.application.arguments.find(a => a.startsWith("qs-second-awake"));
+        return arg && arg.indexOf("=") > 0 ? parseInt(arg.split("=")[1], 10) || 1 : 1;
+    }
     Timer {
-        interval: 1
-        running: grab.plasmoidItem !== null && Qt.application.arguments.includes("qs-second-awake")
+        interval: grab.secondAwakeDelay
+        running: grab.plasmoidItem !== null && Qt.application.arguments.some(a => a.startsWith("qs-second-awake"))
         onTriggered: {
+            // With a command runner of its own, as a real second copy has:
+            // sharing the first one's hides collisions between the two.
             const first = grab.plasmoidItem.keepAwake;
+            const ownShell = Qt.createComponent("backends/Shell.qml").createObject(grab);
             const component = Qt.createComponent("backends/KeepAwake.qml");
             grab.secondAwake = component.createObject(grab, {
-                shell: first.shell, markerName: first.markerName, reason: first.reason });
+                shell: ownShell, markerName: first.markerName, reason: first.reason });
         }
     }
     Timer {
-        interval: 4000
+        interval: 5000
         running: grab.secondAwake !== null
         onTriggered: console.warn("qs-second-awake: first", grab.plasmoidItem.keepAwake.active, grab.plasmoidItem.keepAwake.cookie,
                                   "second", grab.secondAwake.active, grab.secondAwake.cookie)
+    }
+
+    // `qs-check-shell` runs the same atomic command through two command runners
+    // at once. mkdir can only succeed once, so two successes mean the engine
+    // ran it once and gave both runners the one result.
+    Timer {
+        interval: 600
+        running: grab.plasmoidItem !== null && Qt.application.arguments.includes("qs-check-shell")
+        onTriggered: {
+            const a = Qt.createComponent("backends/Shell.qml").createObject(grab);
+            const b = Qt.createComponent("backends/Shell.qml").createObject(grab);
+            const command = 'mkdir "${XDG_RUNTIME_DIR}/qs-shell-check" 2>/dev/null';
+            a.exec(command, (out, code) => console.warn("qs-check-shell: runner A exit", code));
+            b.exec(command, (out, code) => console.warn("qs-check-shell: runner B exit", code));
+        }
     }
 
     // `qs-delay=<ms>` waits longer before grabbing, for the slow readers
