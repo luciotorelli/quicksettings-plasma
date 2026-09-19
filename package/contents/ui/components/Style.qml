@@ -28,7 +28,7 @@ Item {
     // White on a bright orange is glaring, dark text on a deep blue is
     // unreadable, so unless told otherwise this decides from the accent's own
     // perceived brightness (Rec. 601 luma).
-    readonly property bool darkOnAccent: {
+    readonly property bool darkAccentText: {
         if (config.textContrast === "dark") {
             return true;
         }
@@ -37,8 +37,8 @@ Item {
         }
         return 0.299 * accent.r + 0.587 * accent.g + 0.114 * accent.b > 0.5;
     }
-    readonly property color onAccent: darkOnAccent ? Qt.rgba(0, 0, 0, 0.85) : "#ffffff"
-    readonly property color onAccentMuted: darkOnAccent ? Qt.rgba(0, 0, 0, 0.6) : Qt.rgba(1, 1, 1, 0.8)
+    readonly property color accentText: darkAccentText ? Qt.rgba(0, 0, 0, 0.85) : "#ffffff"
+    readonly property color accentTextMuted: darkAccentText ? Qt.rgba(0, 0, 0, 0.6) : Qt.rgba(1, 1, 1, 0.8)
 
     readonly property int pillRadius: config.pillRadius
     readonly property int pillPadding: config.pillPadding

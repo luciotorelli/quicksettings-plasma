@@ -35,7 +35,7 @@ Item {
         case "wifi": return config.showWifi;
         case "vpn": return config.showVpn;
         case "power": return config.showPower && app.power.available;
-        case "fan": return config.showFan && app.fan !== null && app.fan.available;
+        case "fan": return config.showFan && app.fan.available;
         case "nightlight": return config.showNightLight && app.nightLight.available;
         case "awake": return config.showAwake;
         case "airplane": return config.showAirplane;
@@ -66,7 +66,10 @@ Item {
         target: full.app
         function onExpandedChanged() {
             if (full.app.expanded) {
+                // Everything else is live; these are the ones that are read.
                 full.app.brightness.refresh();
+                full.app.fan.refresh();
+                full.app.contrast.scan(false);
             } else {
                 full.collapse();
             }
@@ -115,6 +118,10 @@ Item {
     Component {
         id: powerPanel
         Panels.PowerPanel { app: full.app; style: look }
+    }
+    Component {
+        id: fanPanel
+        Panels.FanPanel { app: full.app; style: look }
     }
 
     ColumnLayout {
@@ -235,20 +242,18 @@ Item {
                 panelKey: full.expandedKey === "audio" ? "audio" : ""
                 Layout.topMargin: open ? 4 : 0
                 Layout.bottomMargin: open ? 4 : 0
-                onFooterActivated: full.app.expanded = false
             }
 
             Repeater {
                 model: full.config.showBrightness ? full.app.brightness.displays : []
-                delegate: SliderRow {
+                delegate: MonitorRow {
                     required property var modelData
 
                     style: look
-                    iconName: modelData.isInternal ? "display-brightness-symbolic" : "video-display-symbolic"
-                    fallbackIconName: modelData.isInternal ? "brightness-high" : "monitor"
-                    label: modelData.label !== "" ? i18n("Brightness: %1", modelData.label) : i18n("Screen brightness")
-                    value: modelData.value
-                    onMoved: value => modelData.setValue(value)
+                    display: modelData
+                    monitor: full.config.showMonitorContrast && !modelData.isInternal
+                        ? full.app.contrast.monitorFor(modelData.label) : null
+                    onContrastCommitted: fraction => full.app.contrast.setContrast(monitor.bus, fraction)
                 }
             }
         }
@@ -334,7 +339,7 @@ Item {
                 fallbackIconName: "weather-windy-symbolic"
                 toggleable: false
                 expandable: true
-                subtitle: full.app.fan ? full.app.fan.summary : ""
+                subtitle: full.app.fan.summary
             }
             Pill {
                 key: "nightlight"
@@ -372,12 +377,12 @@ Item {
                     wifi: wifiPanel,
                     vpn: vpnPanel,
                     power: powerPanel,
+                    fan: fanPanel,
                 })
                 panelKey: full.expandedKey !== "audio" ? full.expandedKey : ""
                 Layout.row: 2 * Math.floor(full.gridPanelSlot / 2) + 1
                 Layout.column: 0
                 Layout.columnSpan: 2
-                onFooterActivated: full.app.expanded = false
             }
         }
     }

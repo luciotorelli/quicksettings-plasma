@@ -22,7 +22,8 @@ PlasmoidItem {
     readonly property alias keepAwake: keepAwake
     readonly property alias power: power
     readonly property alias battery: battery
-    readonly property var fan: null     // fw-fanctrl pill, not built yet
+    readonly property alias fan: fan
+    readonly property alias contrast: contrast
 
     function openSettings(module) {
         KCMUtils.KCMLauncher.openSystemSettings(module);
@@ -78,6 +79,30 @@ PlasmoidItem {
     Backends.KeepAwake { id: keepAwake }
     Backends.PowerProfiles { id: power }
     Backends.Battery { id: battery }
+    Backends.Fan {
+        id: fan
+        shell: shell
+    }
+    Backends.Contrast {
+        id: contrast
+        shell: shell
+        Component.onCompleted: scan(true)
+    }
+
+    // A monitor swap changes which DDC/CI displays exist. Debounced, because
+    // the display list changes several times through a swap and a monitor
+    // needs a moment to wake before it answers.
+    Connections {
+        target: brightness
+        function onDisplayNamesChanged() {
+            rescan.restart();
+        }
+    }
+    Timer {
+        id: rescan
+        interval: 3000
+        onTriggered: contrast.scan(true)
+    }
 
     Sessions.SessionManagement { id: session }
 

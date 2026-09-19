@@ -95,7 +95,7 @@ Item {
                     source: panel.body ? panel.body.iconName : ""
                     fallback: panel.body ? panel.body.fallbackIconName : ""
                     isMask: true
-                    color: panel.style.onAccent
+                    color: panel.style.accentText
                 }
             }
 

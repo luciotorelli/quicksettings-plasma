@@ -29,8 +29,8 @@ Item {
     signal toggled()
     signal expandRequested()
 
-    readonly property color foreground: active ? style.onAccent : style.text
-    readonly property color foregroundMuted: active ? style.onAccentMuted : style.textMuted
+    readonly property color foreground: active ? style.accentText : style.text
+    readonly property color foregroundMuted: active ? style.accentTextMuted : style.textMuted
 
     function _bodyAction() {
         if (toggleable && (bodyToggles || !expandable)) {
@@ -141,7 +141,7 @@ Item {
                 radius: tile.style.pillRadius
                 color: "transparent"
                 border.width: body.visualFocus ? 2 : 0
-                border.color: tile.active ? tile.style.onAccent : tile.style.accent
+                border.color: tile.active ? tile.style.accentText : tile.style.accent
             }
         }
 
@@ -177,13 +177,13 @@ Item {
                 color: tile.active ? Qt.rgba(0, 0, 0, chevron.hovered ? 0.28 : 0.20)
                                    : Qt.alpha(tile.style.text, chevron.hovered ? 0.14 : 0.07)
                 border.width: chevron.visualFocus ? 2 : 0
-                border.color: tile.active ? tile.style.onAccent : tile.style.accent
+                border.color: tile.active ? tile.style.accentText : tile.style.accent
 
                 Rectangle {
                     anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
                     width: 1
                     color: !tile.active ? Qt.alpha(tile.style.text, 0.14)
-                         : tile.style.darkOnAccent ? Qt.rgba(0, 0, 0, 0.28) : Qt.rgba(1, 1, 1, 0.30)
+                         : tile.style.darkAccentText ? Qt.rgba(0, 0, 0, 0.28) : Qt.rgba(1, 1, 1, 0.30)
                 }
             }
         }

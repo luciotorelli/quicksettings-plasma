@@ -6,6 +6,8 @@
 # Runs the package under Qt's offscreen platform, waits for the dev hook in
 # main.qml (qs-grab=<path>) to write the image, then stops the process.
 # QML warnings and console.log output go to <out>.log next to the image.
+# The software renderer is the default because it works anywhere; it cannot
+# tint icons, so use QS_QUICK_BACKEND= (empty) to render on the GPU instead.
 set -u
 
 out=${1:?usage: tools/grab.sh out.png}
@@ -20,13 +22,13 @@ rm -f "$out"
 sed -i '/^geometry=/d' "${XDG_CONFIG_HOME:-$HOME/.config}/plasmawindowedrc" 2>/dev/null
 QT_QPA_PLATFORM=offscreen \
 QT_QPA_PLATFORMTHEME=kde \
-QT_QUICK_BACKEND=software \
+QT_QUICK_BACKEND="${QS_QUICK_BACKEND-software}" \
 QT_FORCE_STDERR_LOGGING=1 \
 QT_LOGGING_RULES="${QT_LOGGING_RULES:-qml.debug=true;js.debug=true;kf.svg=false;kf.plasma.core=false;qt.qpa.*=false}" \
     plasmawindowed "$pkg" "qs-grab=$out" "$@" >"$log" 2>&1 &
 pid=$!
 
-for _ in $(seq 1 100); do
+for _ in $(seq 1 200); do
     [ -s "$out" ] && break
     kill -0 "$pid" 2>/dev/null || break
     sleep 0.2

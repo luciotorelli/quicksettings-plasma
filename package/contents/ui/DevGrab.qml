@@ -20,6 +20,26 @@ Item {
         return arg ? arg.slice("qs-toggle=".length) : "";
     }
 
+    // `qs-check-config` loads every settings page once and reports QML errors,
+    // since the pages are otherwise only compiled when the dialog opens.
+    Component.onCompleted: {
+        if (!Qt.application.arguments.includes("qs-check-config")) {
+            return;
+        }
+        for (const page of ["ConfigPills", "ConfigAppearance", "ConfigSliders", "ConfigBehaviour"]) {
+            const component = Qt.createComponent("config/" + page + ".qml");
+            if (component.status !== Component.Ready) {
+                console.warn("qs-check-config:", page, "FAILED:", component.errorString());
+                continue;
+            }
+            const object = component.createObject(grab, { visible: false });
+            console.log("qs-check-config:", page, object ? "ok" : "could not be created");
+            if (object) {
+                object.destroy();
+            }
+        }
+    }
+
     Timer {
         interval: 700
         running: grab.plasmoidItem !== null && grab.toggleKey !== ""
@@ -45,9 +65,16 @@ Item {
         }
     }
 
+    // `qs-delay=<ms>` waits longer before grabbing, for the slow readers
+    // (ddcutil takes a few seconds to find a monitor).
+    readonly property int delay: {
+        const arg = Qt.application.arguments.find(a => a.startsWith("qs-delay="));
+        return arg ? parseInt(arg.slice("qs-delay=".length), 10) || 2000 : 2000;
+    }
+
     Timer {
         // Long enough for the backends, and for a panel to finish unfolding.
-        interval: 2000
+        interval: grab.delay
         running: grab.plasmoidItem !== null
         onTriggered: {
             const target = grab.plasmoidItem.fullRepresentationItem;
@@ -55,6 +82,12 @@ Item {
                 console.warn("qs-grab: no full representation to grab");
                 Qt.quit();
                 return;
+            }
+            // `qs-demo` swaps personal details for placeholders, for images
+            // that end up somewhere public. A network name is enough to place
+            // a home on a map.
+            if (Qt.application.arguments.includes("qs-demo") && grab.plasmoidItem.network.wifiName !== "") {
+                grab.plasmoidItem.network.wifiName = "Home";
             }
             const ok = target.grabToImage(result => {
                 console.log("qs-grab: saved", grab.plasmoidItem.devGrabPath,
