@@ -18,7 +18,9 @@ the Cinnamon applet, and keeps its layout.
   panel listing networks, devices, tunnels, profiles or fan strategies. The pill's row
   slides up under the header and the panel unfolds beneath it; long lists scroll.
 - **Settings** - which pills and sliders to show, pill size and shape, accent colour,
-  whether the pill or the arrow does the toggling, and the panel animation.
+  whether the pill or the arrow does the toggling, the panel animation, and whether the
+  popup floats clear of the panel and screen edge (on by default) or docks against them
+  the way Plasma does it for a non-floating panel.
 
 ![A panel open](docs/preview-panel.png)
 
@@ -34,7 +36,7 @@ and `pactl` each time the popup opens. Here the state is live:
 | Volume and devices | plasma-pa (`org.kde.plasma.private.volume`) |
 | Brightness | `org.kde.ScreenBrightness` over D-Bus - laptop panel and DDC/CI monitors alike |
 | Night Light | KWin's `NightLight` D-Bus interface to read, KWin's config to switch |
-| Keep Awake | one PowerDevil inhibition (`PolicyAgent.AddInhibition`) |
+| Keep Awake | one PowerDevil inhibition (`PolicyAgent.AddInhibition`), shared by every copy of the widget and restored after a plasmashell restart |
 | Power Mode | PowerDevil's `PowerProfile` D-Bus interface |
 | Battery | UPower's `DisplayDevice` |
 | Monitor contrast | `ddcutil` (Plasma has no contrast control) |

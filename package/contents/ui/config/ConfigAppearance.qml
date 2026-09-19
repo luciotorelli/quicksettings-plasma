@@ -13,8 +13,27 @@ KCM.SimpleKCM {
     property alias cfg_useThemeAccent: useThemeAccent.checked
     property alias cfg_customAccent: customAccent.color
     property string cfg_textContrast
+    property alias cfg_floatingPopup: floatingPopup.checked
 
     Kirigami.FormLayout {
+        QQC2.CheckBox {
+            id: floatingPopup
+            Kirigami.FormData.label: i18n("Popup:")
+            text: i18n("Float clear of the panel and the screen edge")
+        }
+        QQC2.Label {
+            leftPadding: floatingPopup.indicator.width + floatingPopup.spacing
+            text: i18n("Unless the panel itself is set to floating, Plasma docks a popup against it and squares off the corners that touch. This keeps the gap and the rounded corners all the way round.")
+            font: Kirigami.Theme.smallFont
+            opacity: 0.7
+            wrapMode: Text.WordWrap
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 22
+        }
+
+        Item {
+            Kirigami.FormData.isSection: true
+        }
+
         QQC2.SpinBox {
             id: pillPadding
             Kirigami.FormData.label: i18n("Pill height:")

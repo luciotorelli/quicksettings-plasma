@@ -28,6 +28,8 @@
     <entry name="customAccent" type="Color"><default>#ff7139</default></entry>
     <!-- auto | dark | light -->
     <entry name="textContrast" type="String"><default>auto</default></entry>
+    <!-- Keep the popup clear of the panel and the screen edge, borders intact. -->
+    <entry name="floatingPopup" type="Bool"><default>true</default></entry>
   </group>
 
   <group name="Sliders">
@@ -44,10 +46,5 @@
   <group name="Behaviour">
     <entry name="animatePanels" type="Bool"><default>true</default></entry>
     <entry name="animationDuration" type="Int"><default>170</default><min>0</min><max>600</max></entry>
-  </group>
-
-  <group name="State">
-    <!-- Cookie of the Keep Awake inhibition, so it can be released after a widget reload. -->
-    <entry name="keepAwakeCookie" type="Int"><default>0</default></entry>
   </group>
 </kcfg>

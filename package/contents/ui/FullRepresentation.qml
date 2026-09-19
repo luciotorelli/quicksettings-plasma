@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.components as PlasmaComponents
+import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.extras as PlasmaExtras
 import org.kde.plasma.plasmoid
 import org.kde.plasma.workspace.components as WorkspaceComponents
@@ -122,7 +123,10 @@ Item {
 
     onContentHeightChanged: applyTimer.restart()
     onIdleChanged: applyTimer.restart()
-    Component.onCompleted: appliedHeight = contentHeight
+    Component.onCompleted: {
+        appliedHeight = contentHeight;
+        floatPopup();
+    }
     Timer {
         id: applyTimer
         interval: 16
@@ -130,6 +134,38 @@ Item {
             if (full.idle) {
                 full.appliedHeight = full.contentHeight;
             }
+        }
+    }
+
+    // A popup that floats, whatever the panel does.
+    //
+    // Unless the panel is set to floating, the shell gives an applet's popup
+    // no margin and takes away its border wherever it meets the panel or the
+    // screen edge. Tucked into a corner it then reads as a docked side panel:
+    // two square, shadowless edges. Both are ordinary properties of the popup
+    // window, so the widget sets them on the window it finds itself in. They
+    // are only touched when they exist - in a test window, or on the desktop,
+    // there is nothing to set.
+    function floatPopup() {
+        const popup = full.Window.window;
+        if (!popup || !("margin" in popup) || !("removeBorderStrategy" in popup)) {
+            return;
+        }
+        if (config.floatingPopup) {
+            popup.removeBorderStrategy = 0;     // PopupPlasmaWindow.Never
+            popup.margin = Kirigami.Units.largeSpacing;
+        } else {
+            // What the shell would have chosen itself.
+            const floatingPanel = Plasmoid.containmentDisplayHints & PlasmaCore.Types.ContainmentPrefersFloatingApplets;
+            popup.removeBorderStrategy = 3;     // AtScreenEdges | AtPanelEdges
+            popup.margin = floatingPanel ? Kirigami.Units.largeSpacing : 0;
+        }
+    }
+    Window.onWindowChanged: floatPopup()
+    Connections {
+        target: full.config
+        function onFloatingPopupChanged() {
+            full.floatPopup();
         }
     }
 
