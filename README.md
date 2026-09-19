@@ -82,6 +82,7 @@ tools/grab.sh /tmp/qs.png                      # the popup as it opens
 tools/grab.sh /tmp/qs.png qs-expand=wifi       # with a panel open
 tools/grab.sh /tmp/qs.png qs-delay=14000       # wait for ddcutil before grabbing
 tools/grab.sh /tmp/qs.png qs-check-config      # compile every settings page
+tools/grab.sh /tmp/qs.png qs-expand=wifi qs-collapse qs-delay=2600   # open, then close again
 tools/grab.sh docs/preview-main.png qs-demo    # placeholder Wi-Fi name, for public images
 ```
 
