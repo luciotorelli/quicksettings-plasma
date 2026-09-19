@@ -1,0 +1,19 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Lúcio Torelli"
+            }
+        ],
+        "Category": "System Information",
+        "Description": "GNOME-style quick settings: Wi-Fi, Bluetooth, volume, brightness, night light and more in one panel",
+        "Icon": "preferences-system",
+        "Id": "com.github.luciotorelli.quicksettings",
+        "License": "GPL-3.0-or-later",
+        "Name": "Quick Settings",
+        "Version": "0.1.0",
+        "Website": "https://github.com/luciotorelli/quicksettings-plasma"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
