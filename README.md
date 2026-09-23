@@ -39,7 +39,7 @@ and `pactl` each time the popup opens. Here the state is live:
 | Keep Awake | one PowerDevil inhibition (`PolicyAgent.AddInhibition`), shared by every copy of the widget through a marker in `$XDG_RUNTIME_DIR` and restored after a plasmashell restart |
 | Power Mode | PowerDevil's `PowerProfile` D-Bus interface |
 | Battery | UPower's `DisplayDevice` |
-| Monitor contrast | `ddcutil` (Plasma has no contrast control) |
+| Monitor contrast | `ddcutil` (Plasma has no contrast control), run only while a monitor is attached |
 | Fan Curve | `fw-fanctrl` (Framework laptops) |
 
 So there is no prefetching, caching or re-reading after an action: a pill's subtitle is
@@ -83,8 +83,9 @@ so layout changes can be checked without installing anything or opening a window
 ```bash
 tools/grab.sh /tmp/qs.png                      # the popup as it opens
 tools/grab.sh /tmp/qs.png qs-expand=wifi       # with a panel open
-tools/grab.sh /tmp/qs.png qs-delay=14000       # wait for ddcutil before grabbing
+tools/grab.sh /tmp/qs.png qs-delay=14000       # wait for ddcutil (only runs with a monitor attached)
 tools/grab.sh /tmp/qs.png qs-check-config      # compile every settings page
+tools/grab.sh /tmp/qs.png qs-check-contrast qs-delay=5000   # ddcutil only runs for a monitor
 tools/grab.sh /tmp/qs.png qs-expand=wifi qs-collapse qs-delay=2600   # open, then close again
 tools/grab.sh /tmp/qs.png qs-expand=audio qs-switch=wifi qs-delay=2600   # one panel to another
 tools/grab.sh docs/preview-main.png qs-demo    # placeholder Wi-Fi name, for public images
@@ -109,3 +110,9 @@ Things learned the hard way:
   per-runner token (`tools/grab.sh out.png qs-check-shell` demonstrates it).
 - A QML trap: a property whose name starts with `on` followed by a capital (`onAccent`)
   is parsed as a signal handler and silently never gets its value.
+- `ddcutil detect` probes every I2C bus it can open, and that includes the laptop panel's
+  own DDC bus. On AMD laptops the probe can freeze the internal display while the rest of
+  the system carries on (see [ddcutil issue #559](https://github.com/rockowitz/ddcutil/issues/559)
+  and ["Regression: DDC I2C Display Freezing for internal displays"](https://www.mail-archive.com/amd-gfx@lists.freedesktop.org/msg121894.html)
+  on amd-gfx). The widget therefore only runs ddcutil while Plasma lists a DDC/CI monitor,
+  and then once as the monitor appears - never on every popup open (see `Contrast.qml`).

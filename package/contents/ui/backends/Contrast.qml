@@ -6,11 +6,24 @@ import QtQuick
 // no contrast control, so this one setting still goes the way the Cinnamon
 // applet did it. Commands run strictly one after another: two ddcutil
 // processes talking to the same I2C bus at once corrupt each other's replies.
+//
+// ddcutil is only ever run while Plasma lists a monitor. `ddcutil detect`
+// probes every I2C bus it can open, and that includes the laptop panel's own
+// DDC bus; on AMD laptops that probe can freeze the internal display while the
+// rest of the system carries on (ddcutil issue #559, and "Regression: DDC I2C
+// Display Freezing for internal displays" on amd-gfx). With only the laptop
+// panel there is nothing to scan, so nothing runs. When a monitor is attached
+// the scan happens once, as it appears - not every time the popup opens.
 Item {
     id: contrast
     visible: false
 
     required property var shell
+    // The Brightness backend's displays. A monitor among them is what makes
+    // a scan worthwhile: the contrast slider can only sit beside one of them.
+    property var displays: []
+    // The "External monitor contrast" setting; off means ddcutil never runs.
+    property bool wanted: true
 
     property bool available: false      // ddcutil is installed
     property bool scanning: false
@@ -18,9 +31,36 @@ Item {
     // bindings that look a monitor up re-evaluate.
     property var monitors: []
 
+    // The monitors Plasma lists, as one string so that it only changes when
+    // the set does; the displays array itself is rebuilt on every refresh.
+    // A display counts once its properties have arrived: before that every
+    // display looks external.
+    readonly property string monitorKey: !wanted ? ""
+        : displays.filter(d => d.loaded && !d.isInternal).map(d => d.name).sort().join("\n")
+    readonly property bool hasMonitor: monitorKey !== ""
+
     property double _lastScan: 0
     property var _queue: []
     property bool _busy: false
+
+    // A monitor swap changes which DDC/CI displays exist. Debounced, because
+    // the display list changes several times through a swap and a monitor
+    // needs a moment to wake before it answers. Tested on monitorKey, not
+    // hasMonitor: a property derived from the one that just changed has not
+    // been re-evaluated yet while this handler runs.
+    onMonitorKeyChanged: {
+        if (monitorKey !== "") {
+            rescan.restart();
+        } else {
+            rescan.stop();
+            monitors = [];
+        }
+    }
+    Timer {
+        id: rescan
+        interval: 3000
+        onTriggered: contrast.scan(true)
+    }
 
     /**
      * The DDC/CI monitor behind one of Plasma's displays, matched by model
@@ -41,6 +81,20 @@ Item {
             }
         }
         return null;
+    }
+
+    /**
+     * Fills in what the scan on arrival missed - a monitor that was still
+     * waking up when it was plugged in. For when the popup opens: runs
+     * nothing unless a listed monitor has no contrast reading yet.
+     */
+    function ensure() {
+        if (!hasMonitor) {
+            return;
+        }
+        if (displays.some(d => d.loaded && !d.isInternal && monitorFor(d.label) === null)) {
+            scan(false);
+        }
     }
 
     /**
@@ -67,12 +121,13 @@ Item {
     }
 
     /**
-     * Looks for DDC/CI monitors and reads their contrast.
+     * Looks for DDC/CI monitors and reads their contrast. Does nothing unless
+     * Plasma lists a monitor; see the note at the top.
      *
      * @param {bool} [force] - Scan even if one ran a moment ago.
      */
     function scan(force) {
-        if (scanning || (!force && Date.now() - _lastScan < 60000)) {
+        if (!hasMonitor || scanning || (!force && Date.now() - _lastScan < 60000)) {
             return;
         }
         scanning = true;
@@ -102,7 +157,8 @@ Item {
                     }
                 }
             }
-            contrast.monitors = found.filter(monitor => monitor.bus >= 0);
+            // The monitor may have gone while ddcutil was looking for it.
+            contrast.monitors = contrast.hasMonitor ? found.filter(monitor => monitor.bus >= 0) : [];
             for (const monitor of contrast.monitors) {
                 _enqueue({ write: false, bus: monitor.bus, command: "ddcutil --bus=" + monitor.bus + " --terse getvcp 12" });
             }

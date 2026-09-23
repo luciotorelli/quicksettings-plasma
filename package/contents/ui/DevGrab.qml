@@ -144,6 +144,93 @@ Item {
         }
     }
 
+    // `qs-check-contrast` drives the Contrast backend with a fake command
+    // runner and fake displays, and reports what it would have run: nothing
+    // while only the laptop panel is listed, one detect and one read when a
+    // monitor appears, nothing more when the popup re-reads the displays.
+    // Needs qs-delay=5000: the backend waits three seconds for a monitor to
+    // wake before it looks.
+    property var contrastCheck: null
+    // A command runner that records what it is asked and answers as ddcutil
+    // would for one Dell monitor. A QML object, not a plain one: a function
+    // on a plain object does not survive being passed as a property.
+    Component {
+        id: fakeShell
+        QtObject {
+            property var commands: []
+            function exec(command, callback) {
+                commands = commands.concat([command]);
+                if (!callback) {
+                    return;
+                }
+                if (command.indexOf("detect") >= 0) {
+                    callback("Display 1\n   I2C bus:          /dev/i2c-21\n   Monitor:          DEL:Dell S2716DG:ABC123\n", 0, "");
+                } else if (command.indexOf("getvcp") >= 0) {
+                    callback("VCP 12 C 94 125\n", 0, "");
+                } else {
+                    callback("", 0, "");
+                }
+            }
+        }
+    }
+    Timer {
+        interval: 600
+        running: grab.plasmoidItem !== null && Qt.application.arguments.includes("qs-check-contrast")
+        onTriggered: {
+            const shell = fakeShell.createObject(grab);
+            const panel = { name: "display0", label: "Built-in Screen", isInternal: true, loaded: true };
+            const monitor = { name: "ddc1", label: "Dell Inc. Dell S2716DG", isInternal: false, loaded: true };
+            const contrast = Qt.createComponent("backends/Contrast.qml").createObject(grab, { shell: shell, displays: [panel] });
+            const failures = [];
+            const expect = (what, ok) => { if (!ok) failures.push(what); };
+
+            contrast.scan(true);
+            contrast.ensure();
+            expect("nothing runs with the laptop panel alone", shell.commands.length === 0);
+            contrast.displays = [panel, Object.assign({}, monitor, { loaded: false })];
+            contrast.scan(true);
+            expect("a display whose properties have not arrived is not a monitor", shell.commands.length === 0);
+            contrast.displays = [panel, monitor];
+            expect("a monitor does not trigger ddcutil at once", shell.commands.length === 0 && !contrast.scanning);
+            grab.contrastCheck = { contrast: contrast, shell: shell, panel: panel, monitor: monitor, failures: failures, expect: expect };
+            contrastSettle.start();
+        }
+    }
+    Timer {
+        id: contrastSettle
+        interval: 3500
+        onTriggered: {
+            const t = grab.contrastCheck;
+            const commands = () => t.shell.commands;
+            const found = t.contrast.monitorFor(t.monitor.label);
+            t.expect("one detect and one read after the monitor settles: " + JSON.stringify(commands()),
+                     commands().length === 2 && commands()[0].indexOf("ddcutil detect --brief") >= 0
+                     && commands()[1] === "ddcutil --bus=21 --terse getvcp 12");
+            t.expect("the monitor is matched with its reading", found !== null && found.value === 94 && found.max === 125);
+
+            const before = commands().length;
+            t.contrast.displays = [t.panel, t.monitor];      // the popup re-reads the displays
+            t.contrast.ensure();
+            t.expect("re-reading the same displays runs nothing", commands().length === before);
+
+            t.contrast.setContrast(21, 0.5);
+            t.expect("a contrast change writes to the monitor's bus only",
+                     commands().length === before + 1 && commands()[before] === "ddcutil --bus=21 setvcp 12 63");
+
+            t.contrast.displays = [t.panel];                 // unplugged
+            t.expect("unplugging forgets the monitor without running anything",
+                     t.contrast.monitors.length === 0 && commands().length === before + 1);
+
+            if (t.failures.length === 0) {
+                console.warn("qs-check-contrast: ok");
+            } else {
+                for (const failure of t.failures) {
+                    console.warn("qs-check-contrast: FAILED:", failure);
+                }
+            }
+        }
+    }
+
     // `qs-delay=<ms>` waits longer before grabbing, for the slow readers
     // (ddcutil takes a few seconds to find a monitor).
     readonly property int delay: {

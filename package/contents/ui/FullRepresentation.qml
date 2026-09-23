@@ -184,10 +184,12 @@ Item {
         function onExpandedChanged() {
             if (full.app.expanded) {
                 // Everything else is live; these are the ones that are read.
+                // Contrast only runs ddcutil if a listed monitor still has
+                // no reading; with the laptop panel alone it does nothing.
                 full.app.brightness.refresh();
                 full.app.keepAwake.refresh();
                 full.app.fan.refresh();
-                full.app.contrast.scan(false);
+                full.app.contrast.ensure();
             } else {
                 full.collapse();
             }

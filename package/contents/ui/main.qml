@@ -106,25 +106,13 @@ PlasmoidItem {
         id: fan
         shell: shell
     }
+    // Runs ddcutil only while Plasma lists a monitor, and then once per
+    // change of monitors rather than on every open; see Contrast.qml for why.
     Backends.Contrast {
         id: contrast
         shell: shell
-        Component.onCompleted: scan(true)
-    }
-
-    // A monitor swap changes which DDC/CI displays exist. Debounced, because
-    // the display list changes several times through a swap and a monitor
-    // needs a moment to wake before it answers.
-    Connections {
-        target: brightness
-        function onDisplayNamesChanged() {
-            rescan.restart();
-        }
-    }
-    Timer {
-        id: rescan
-        interval: 3000
-        onTriggered: contrast.scan(true)
+        displays: brightness.displays
+        wanted: Plasmoid.configuration.showBrightness && Plasmoid.configuration.showMonitorContrast
     }
 
     Sessions.SessionManagement { id: session }

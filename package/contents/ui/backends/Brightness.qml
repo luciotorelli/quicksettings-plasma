@@ -96,6 +96,9 @@ Item {
             readonly property string name: modelData
             property string label: ""
             property bool isInternal: false
+            // True once the properties below have arrived; until then the
+            // laptop panel is indistinguishable from a monitor.
+            property bool loaded: false
             property int raw: 0
             property int max: 1
             readonly property real value: max > 0 ? raw / max : 0
@@ -131,6 +134,7 @@ Item {
                     display.isInternal = properties.IsInternal === true;
                     display.max = Number(properties.MaxBrightness) || 1;
                     display.raw = Number(properties.Brightness) || 0;
+                    display.loaded = true;
                     brightness._rebuild();
                 }
             }
